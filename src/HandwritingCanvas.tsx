@@ -6,11 +6,11 @@ import { Canvas, Path, Skia, SkPath, ImageFormat } from "@shopify/react-native-s
 type Stroke = { id: number; path: SkPath };
 
 interface Props {
-  onSnapshot: (pngBase64: string) => void;
+  onRecognize: (pngBase64: string) => void;
   clearTrigger?: number;
 }
 
-export const HandwritingCanvas: React.FC<Props> = ({ onSnapshot, clearTrigger }) => {
+export const HandwritingCanvas: React.FC<Props> = ({ onRecognize, clearTrigger }) => {
   const [strokes, setStrokes] = useState<Stroke[]>([]);
   const current = useRef<Stroke | null>(null);
   const canvasRef = useRef<any>(null);
@@ -55,11 +55,17 @@ export const HandwritingCanvas: React.FC<Props> = ({ onSnapshot, clearTrigger })
   };
 
   const clear = () => setStrokes([]);
-  const snapshot = () => {
-    console.log("📸 Snapshot button pressed");
+  
+  const recognizeAndClear = () => {
+    if (strokes.length === 0) {
+      console.log("⚠️ No strokes to recognize");
+      return;
+    }
+
+    console.log("🔍 Starting recognition...");
     
     // Create a new surface with white background and black strokes for Mathpix
-    const width = 1360; // Match the dimensions from Mathpix response
+    const width = 1360;
     const height = 440;
     const surface = Skia.Surface.Make(width, height);
     if (!surface) {
@@ -108,7 +114,7 @@ export const HandwritingCanvas: React.FC<Props> = ({ onSnapshot, clearTrigger })
 
     if (b64) {
       console.log("✅ Snapshot successful, length:", b64.length);
-      onSnapshot(b64);
+      onRecognize(b64);
     } else {
       console.log("❌ No base64 data generated");
     }
@@ -148,8 +154,14 @@ export const HandwritingCanvas: React.FC<Props> = ({ onSnapshot, clearTrigger })
         <Pressable style={styles.btn} onPress={clear}>
           <Text style={styles.btnText}>Clear</Text>
         </Pressable>
-        <Pressable style={styles.btn} onPress={snapshot}>
-          <Text style={styles.btnText}>Snapshot</Text>
+        <Pressable 
+          style={[styles.btnRecognize, empty && styles.btnDisabled]} 
+          onPress={recognizeAndClear}
+          disabled={empty}
+        >
+          <Text style={styles.btnText}>
+            {empty ? "Write something first" : "Recognize"}
+          </Text>
         </Pressable>
       </View>
     </View>
@@ -180,6 +192,17 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
+  },
+  btnRecognize: {
+    flex: 1,
+    backgroundColor: "#3252ff",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  btnDisabled: {
+    opacity: 0.4,
   },
   btnText: { color: "#e6ecff", fontWeight: "700" },
 });

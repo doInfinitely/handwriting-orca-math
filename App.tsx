@@ -32,8 +32,8 @@ const PROBLEM: Problem = {
 export default function App() {
   const [steps, setSteps] = useState<Step[]>([]);
   const [typedDraft, setTypedDraft] = useState("");
-  const [inkB64, setInkB64] = useState<string | null>(null);
   const [recognizedText, setRecognizedText] = useState<string | null>(null);
+  const [recognizedImage, setRecognizedImage] = useState<string | null>(null);
   const [recognizing, setRecognizing] = useState(false);
   const [clearCanvasTrigger, setClearCanvasTrigger] = useState(0);
   const solved = useMemo(() => isSolved(steps, PROBLEM), [steps]);
@@ -54,21 +54,18 @@ export default function App() {
   };
 
   // --- Handwriting flow ---
-  const recognizeInk = async () => {
-    console.log("🔍 Recognize button pressed");
-    if (!inkB64) {
-      console.log("❌ No inkB64 available");
-      return;
-    }
-    console.log("📤 Calling Mathpix API...");
+  const handleRecognize = async (imageB64: string) => {
+    console.log("🔍 Recognition started with image");
     setRecognizing(true);
+    setRecognizedImage(imageB64);
     try {
-      const text = await recognizeHandwriting(inkB64);
+      const text = await recognizeHandwriting(imageB64);
       console.log("✅ Recognition successful:", text);
       setRecognizedText(text);
     } catch (e: any) {
       console.log("❌ Recognition error:", e);
       Alert.alert("Recognition error", e?.message ?? "Failed to recognize handwriting.");
+      setRecognizedImage(null);
     } finally {
       setRecognizing(false);
     }
@@ -80,19 +77,19 @@ export default function App() {
     const newStep: Step = {
       id: `${Date.now()}`,
       text: recognizedText,
-      imageBase64: inkB64 ?? undefined,
+      imageBase64: recognizedImage ?? undefined,
       outcome: res.outcome,
       feedback: res.feedback,
     };
     setSteps((prev) => [...prev, newStep]);
-    setInkB64(null);
+    setRecognizedImage(null);
     setRecognizedText(null);
     setClearCanvasTrigger((prev) => prev + 1); // Trigger canvas clear
   };
 
   const cancelRecognition = () => {
     setRecognizedText(null);
-    setInkB64(null);
+    setRecognizedImage(null);
   };
 
   const undo = () => setSteps((prev) => prev.slice(0, -1));
@@ -116,23 +113,24 @@ export default function App() {
         {/* Handwriting */}
         <View style={styles.card}>
           <Text style={styles.label}>Handwriting</Text>
-          <HandwritingCanvas onSnapshot={setInkB64} clearTrigger={clearCanvasTrigger} />
+          <HandwritingCanvas onRecognize={handleRecognize} clearTrigger={clearCanvasTrigger} />
           
-          {/* Show snapshot preview if captured */}
-          {inkB64 && !recognizedText && (
-            <View style={styles.snapshotPreview}>
-              <Text style={styles.previewLabel}>Snapshot captured ✓</Text>
-              <Image
-                source={{ uri: `data:image/png;base64,${inkB64}` }}
-                style={styles.snapshotImage}
-                resizeMode="contain"
-              />
+          {recognizing && (
+            <View style={styles.recognizingIndicator}>
+              <Text style={styles.recognizingText}>🔍 Recognizing...</Text>
             </View>
           )}
           
-          {recognizedText ? (
+          {recognizedText && (
             <View style={styles.recognitionPreview}>
               <Text style={styles.previewLabel}>Recognized text:</Text>
+              {recognizedImage && (
+                <Image
+                  source={{ uri: `data:image/png;base64,${recognizedImage}` }}
+                  style={styles.snapshotImage}
+                  resizeMode="contain"
+                />
+              )}
               <View style={styles.latexContainer}>
                 <LatexRenderer latex={recognizedText} />
               </View>
@@ -144,18 +142,6 @@ export default function App() {
                   <Text style={styles.btnGhostText}>✕ Redraw</Text>
                 </Pressable>
               </View>
-            </View>
-          ) : (
-            <View style={styles.rowGap}>
-              <Pressable
-                style={[styles.btn, (!inkB64 || recognizing) && styles.btnDisabled]}
-                onPress={recognizeInk}
-                disabled={!inkB64 || recognizing}
-              >
-                <Text style={styles.btnText}>
-                  {recognizing ? "Recognizing..." : inkB64 ? "Recognize" : "Write → Snapshot first"}
-                </Text>
-              </Pressable>
             </View>
           )}
         </View>
@@ -328,19 +314,25 @@ const styles = StyleSheet.create({
   btnDisabled: { opacity: 0.5 },
   actions: { marginTop: 8, flexDirection: "row", gap: 8 },
 
-  snapshotPreview: {
+  recognizingIndicator: {
     backgroundColor: "#0e1430",
     borderRadius: 12,
-    padding: 12,
-    gap: 8,
+    padding: 16,
+    alignItems: "center",
     borderWidth: 1,
     borderColor: "#243269",
   },
+  recognizingText: {
+    color: "#9bb0ff",
+    fontSize: 14,
+    fontWeight: "600",
+  },
   snapshotImage: {
     width: "100%",
-    height: 100,
+    height: 80,
     backgroundColor: "#0e1430",
     borderRadius: 8,
+    marginBottom: 8,
   },
   recognitionPreview: {
     backgroundColor: "#0e1430",
