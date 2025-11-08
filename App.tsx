@@ -15,7 +15,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { StatusBar } from "expo-status-bar";
 
 import type { Problem, Step } from "./src/types";
-import { checkNewLine, finalCheck, isSolved } from "./src/checker";
+import { checkNewLine, finalCheck } from "./src/checker";
 import { HandwritingCanvas } from "./src/HandwritingCanvas";
 import { recognizeHandwriting } from "./src/mathpix";
 import { LatexRenderer } from "./src/LatexRenderer";
@@ -36,21 +36,35 @@ export default function App() {
   const [recognizedImage, setRecognizedImage] = useState<string | null>(null);
   const [recognizing, setRecognizing] = useState(false);
   const [clearCanvasTrigger, setClearCanvasTrigger] = useState(0);
-  const solved = useMemo(() => isSolved(steps, PROBLEM), [steps]);
+  const [validating, setValidating] = useState(false);
+  
+  // Check if solved based on step outcomes (all correct or has correct final answer)
+  const solved = useMemo(() => {
+    return steps.some(s => s.outcome === "correct") && 
+           steps[steps.length - 1]?.outcome === "correct";
+  }, [steps]);
 
   // --- Typed flow (optional fallback) ---
-  const commitTyped = () => {
+  const commitTyped = async () => {
     const text = typedDraft.trim();
     if (!text) return;
-    const res = checkNewLine(PROBLEM, steps, text);
-    const newStep: Step = {
-      id: `${Date.now()}`,
-      text,
-      outcome: res.outcome,
-      feedback: res.feedback,
-    };
-    setSteps((prev) => [...prev, newStep]);
-    setTypedDraft("");
+    setValidating(true);
+    try {
+      const res = await checkNewLine(PROBLEM, steps, text);
+      const newStep: Step = {
+        id: `${Date.now()}`,
+        text,
+        outcome: res.outcome,
+        feedback: res.feedback,
+      };
+      setSteps((prev) => [...prev, newStep]);
+      setTypedDraft("");
+    } catch (e) {
+      console.error("Validation error:", e);
+      Alert.alert("Error", "Failed to validate step. Please try again.");
+    } finally {
+      setValidating(false);
+    }
   };
 
   // --- Handwriting flow ---
@@ -71,20 +85,28 @@ export default function App() {
     }
   };
 
-  const commitInk = () => {
+  const commitInk = async () => {
     if (!recognizedText) return;
-    const res = checkNewLine(PROBLEM, steps, recognizedText);
-    const newStep: Step = {
-      id: `${Date.now()}`,
-      text: recognizedText,
-      imageBase64: recognizedImage ?? undefined,
-      outcome: res.outcome,
-      feedback: res.feedback,
-    };
-    setSteps((prev) => [...prev, newStep]);
-    setRecognizedImage(null);
-    setRecognizedText(null);
-    setClearCanvasTrigger((prev) => prev + 1); // Trigger canvas clear
+    setValidating(true);
+    try {
+      const res = await checkNewLine(PROBLEM, steps, recognizedText);
+      const newStep: Step = {
+        id: `${Date.now()}`,
+        text: recognizedText,
+        imageBase64: recognizedImage ?? undefined,
+        outcome: res.outcome,
+        feedback: res.feedback,
+      };
+      setSteps((prev) => [...prev, newStep]);
+      setRecognizedImage(null);
+      setRecognizedText(null);
+      setClearCanvasTrigger((prev) => prev + 1); // Trigger canvas clear
+    } catch (e) {
+      console.error("Validation error:", e);
+      Alert.alert("Error", "Failed to validate step. Please try again.");
+    } finally {
+      setValidating(false);
+    }
   };
 
   const cancelRecognition = () => {
@@ -93,9 +115,17 @@ export default function App() {
   };
 
   const undo = () => setSteps((prev) => prev.slice(0, -1));
-  const submitFinal = () => {
-    const res = finalCheck(PROBLEM, steps);
-    Alert.alert("Submit", res.feedback);
+  const submitFinal = async () => {
+    setValidating(true);
+    try {
+      const res = await finalCheck(PROBLEM, steps);
+      Alert.alert("Submit", res.feedback);
+    } catch (e) {
+      console.error("Final check error:", e);
+      Alert.alert("Error", "Failed to check solution. Please try again.");
+    } finally {
+      setValidating(false);
+    }
   };
 
   return (
@@ -139,10 +169,20 @@ export default function App() {
                 <LatexRenderer latex={recognizedText} />
               </View>
               <View style={styles.rowGap}>
-                <Pressable style={styles.btn} onPress={commitInk}>
-                  <Text style={styles.btnText}>✓ Commit</Text>
+                <Pressable 
+                  style={[styles.btn, validating && styles.btnDisabled]} 
+                  onPress={commitInk}
+                  disabled={validating}
+                >
+                  <Text style={styles.btnText}>
+                    {validating ? "Validating..." : "✓ Commit"}
+                  </Text>
                 </Pressable>
-                <Pressable style={styles.btnGhost} onPress={cancelRecognition}>
+                <Pressable 
+                  style={[styles.btnGhost, validating && styles.btnDisabled]} 
+                  onPress={cancelRecognition}
+                  disabled={validating}
+                >
                   <Text style={styles.btnGhostText}>✕ Redraw</Text>
                 </Pressable>
               </View>

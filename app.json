@@ -33,7 +33,8 @@
     },
     "extra": {
       "expoPublic": {
-        "MATHPIX_PROXY_URL": "http://10.10.0.202:5056/recognize"
+        "MATHPIX_PROXY_URL": "http://10.10.0.202:5056/recognize",
+        "LLM_API_URL": "http://10.10.0.202:5056/validate"
       },
       "eas": {
         "projectId": "de513976-d38c-42fe-aed0-84f6591a2d3f"

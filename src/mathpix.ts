@@ -1,4 +1,6 @@
-const PROXY = process.env.EXPO_PUBLIC_MATHPIX_PROXY_URL || 'http://localhost:5056/recognize';
+import Constants from 'expo-constants';
+
+const PROXY = Constants.expoConfig?.extra?.expoPublic?.MATHPIX_PROXY_URL || 'http://10.10.0.202:5056/recognize';
 
 
 export async function recognizeHandwriting(pngBase64: string): Promise<string> {
