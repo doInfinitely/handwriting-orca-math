@@ -2,10 +2,10 @@
 import React, { useMemo, useState } from "react";
 import {
   Alert,
-  FlatList,
   Image,
   Pressable,
   SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -102,13 +102,17 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaView style={styles.safe}>
         <StatusBar style="light" />
-        <View style={styles.container}>
+        <ScrollView 
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
           <Text style={styles.h1}>OrcaMath — Handwriting Prototype</Text>
 
-        <View style={styles.card}>
-          <Text style={styles.label}>Problem</Text>
-          <Text style={styles.problem}>{PROBLEM.question}</Text>
-        </View>
+          <View style={styles.card}>
+            <Text style={styles.label}>Problem</Text>
+            <Text style={styles.problem}>{PROBLEM.question}</Text>
+          </View>
 
         {/* Handwriting */}
         <View style={styles.card}>
@@ -155,12 +159,9 @@ export default function App() {
             </Text>
           </View>
 
-          <FlatList
-            data={steps}
-            keyExtractor={(s) => s.id}
-            contentContainerStyle={{ paddingTop: 6 }}
-            renderItem={({ item }) => (
-              <View style={styles.stepItem}>
+          {steps.length > 0 ? (
+            steps.map((item) => (
+              <View key={item.id} style={styles.stepItem}>
                 {item.imageBase64 && (
                   <Image
                     source={{ uri: `data:image/png;base64,${item.imageBase64}` }}
@@ -183,11 +184,10 @@ export default function App() {
                 </Text>
                 {!!item.feedback && <Text style={styles.feedback}>{item.feedback}</Text>}
               </View>
-            )}
-            ListEmptyComponent={
-              <Text style={styles.empty}>No steps yet. Try handwriting “x/10 = 6”.</Text>
-            }
-          />
+            ))
+          ) : (
+            <Text style={styles.empty}>No steps yet. Try handwriting "x/10 = 6".</Text>
+          )}
 
           {/* Optional typed input (kept as a fallback) */}
           <View style={styles.inputRow}>
@@ -220,7 +220,7 @@ export default function App() {
             </Pressable>
           </View>
         </View>
-      </View>
+        </ScrollView>
       </SafeAreaView>
     </GestureHandlerRootView>
   );
@@ -228,7 +228,8 @@ export default function App() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#0b1020" },
-  container: { flex: 1, padding: 16, gap: 12 },
+  scroll: { flex: 1 },
+  scrollContent: { padding: 16, gap: 12 },
   h1: { color: "#f3f6ff", fontSize: 22, fontWeight: "700", marginBottom: 4 },
 
   card: {
