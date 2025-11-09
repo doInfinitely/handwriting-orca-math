@@ -11,8 +11,27 @@ APP_ID = os.getenv("MATHPIX_APP_ID", "")
 APP_KEY = os.getenv("MATHPIX_APP_KEY", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
-app = FastAPI()
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app = FastAPI(title="OrcaMath API - Recognition & Validation")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://rkukjujwpmimamapxhtg.supabase.co",
+        "*"  # For mobile app - tighten this in production
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+   
+# Health check endpoint
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for monitoring"""
+    return {
+        "status": "healthy",
+        "service": "OrcaMath API",
+        "version": "1.0.0"
+    }
 
 # Initialize OpenAI client
 def get_openai_client():

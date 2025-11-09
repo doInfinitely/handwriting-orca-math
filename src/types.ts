@@ -22,6 +22,9 @@ export interface Problem {
 
 // Navigation types
 export type RootStackParamList = {
+  Login: undefined;
+  Signup: undefined;
   ProblemsList: undefined;
   ProblemSolve: { problem: Problem };
+  Profile: undefined;
 };
