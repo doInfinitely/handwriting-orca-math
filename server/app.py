@@ -46,26 +46,35 @@ class FinalCheckResponse(BaseModel):
 
 VALIDATION_SYSTEM_PROMPT = """You are an expert math tutor validating student work step-by-step.
 
-Your job is to evaluate a single step in the student's solution process.
+Your job: Evaluate if the CURRENT STEP is mathematically correct.
 
-Given:
-- The original problem question
-- The expected final answer
-- All prior steps the student has written
-- The current step to validate
+CRITICAL RULES:
+1. **Verify the arithmetic/algebra** - Check if the math in this step is correct
+2. **The step does NOT need to equal the final answer** - it's just one step in a multi-step solution
+3. **Use proper order of operations** - Evaluate expressions correctly (PEMDAS/BODMAS)
+4. **Examples of CORRECT steps**:
+   - "458.64 / 14 = 32.76" (division is correct)
+   - "32.76 - 1 * 17 = 15.76" (multiplication first: 1*17=17, then 32.76-17=15.76 ✓)
+   - "⌊32.76 / 17⌋ = 1" (floor division: 32.76÷17=1.927..., floor = 1 ✓)
+5. **Accept various notations**:
+   - "/" and "÷" for division
+   - "*" and "×" for multiplication
+   - "⌊x⌋" for floor function
+   - "mod" for modulo
+6. **Only mark "incorrect" if there's an actual math error** - be absolutely certain!
 
-Determine if the current step is:
-1. "correct" - mathematically sound and helpful toward the solution
-2. "incorrect" - contains an error or wrong reasoning
-3. "neutral" - not wrong but not particularly helpful
+Evaluation criteria:
+- "correct" → The math is valid and helps solve the problem
+- "incorrect" → There's a calculation error (verify carefully!)
+- "neutral" → Correct math but doesn't advance the solution
 
-Respond in JSON format:
+Respond in JSON:
 {
   "outcome": "correct" | "incorrect" | "neutral",
-  "feedback": "Brief encouraging feedback (1-2 sentences)"
+  "feedback": "Brief encouragement (1-2 sentences)"
 }
 
-Be encouraging and specific. If correct, praise what they did. If incorrect, gently point out the error. If neutral, guide them toward a useful next step."""
+Be encouraging and mathematically precise!"""
 
 FINAL_CHECK_SYSTEM_PROMPT = """You are an expert math tutor checking if a student has fully solved a problem.
 
@@ -93,9 +102,46 @@ async def recognize(ink: Ink):
         data = resp.json()
     return {"text": (data.get("text") or "").strip(), "raw": data}
 
+def check_arithmetic(step: str) -> tuple[bool | None, str | None]:
+    """Check if a step contains simple arithmetic that we can verify directly."""
+    import re
+    
+    # Remove LaTeX delimiters
+    step_clean = step.replace('\\(', '').replace('\\)', '').replace('$', '').strip()
+    
+    # Match patterns like "X / Y = Z" or "X + Y = Z" etc.
+    patterns = [
+        (r'(\d+\.?\d*)\s*[/÷]\s*(\d+\.?\d*)\s*=\s*(\d+\.?\d*)', '/', lambda a, b: a / b if b != 0 else None),
+        (r'(\d+\.?\d*)\s*\*\s*(\d+\.?\d*)\s*=\s*(\d+\.?\d*)', '*', lambda a, b: a * b),
+        (r'(\d+\.?\d*)\s*\+\s*(\d+\.?\d*)\s*=\s*(\d+\.?\d*)', '+', lambda a, b: a + b),
+        (r'(\d+\.?\d*)\s*-\s*(\d+\.?\d*)\s*=\s*(\d+\.?\d*)', '-', lambda a, b: a - b),
+    ]
+    
+    for pattern, op_symbol, operation in patterns:
+        match = re.search(pattern, step_clean)
+        if match:
+            try:
+                left = float(match.group(1))
+                right = float(match.group(2))
+                result = float(match.group(3))
+                expected = operation(left, right)
+                
+                if expected is None:
+                    continue
+                
+                # Allow small floating point errors
+                if abs(expected - result) < 0.01:
+                    return True, f"Perfect! {left} {op_symbol} {right} = {result} is absolutely correct!"
+                else:
+                    return False, f"Check your calculation: {left} {op_symbol} {right} should equal {expected:.2f}, not {result}"
+            except (ValueError, ZeroDivisionError):
+                pass
+    
+    return None, None  # Can't verify automatically
+
 @app.post("/validate", response_model=ValidationResponse)
 async def validate_step(req: ValidationRequest):
-    """Validate a single math step."""
+    """Validate a single math step using GPT-4o."""
     prior_steps_text = "\n".join(f"{i+1}. {step}" for i, step in enumerate(req.priorSteps))
     
     user_message = f"""Problem: {req.question}
@@ -113,7 +159,7 @@ Evaluate this step and respond with JSON."""
     try:
         client = get_openai_client()
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-4o",
             messages=[
                 {"role": "system", "content": VALIDATION_SYSTEM_PROMPT},
                 {"role": "user", "content": user_message}
@@ -150,7 +196,7 @@ Has the student fully solved this problem? Respond with JSON."""
     try:
         client = get_openai_client()
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-4o",
             messages=[
                 {"role": "system", "content": FINAL_CHECK_SYSTEM_PROMPT},
                 {"role": "user", "content": user_message}

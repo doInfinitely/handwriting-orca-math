@@ -6,14 +6,22 @@ export interface Step {
   text: string;
   outcome: StepOutcome;
   feedback?: string;
+  imageBase64?: string;
 }
 
 
 export interface Problem {
-  id: string;
+  id: string | number;
   question: string;
   canonicalAnswer: string; // string for simplicity
   // Optional metadata hooks for later (skill, difficulty, etc.)
   skill?: string[];
+  skill_tags?: string[];
   difficulty?: "easy" | "medium" | "hard";
 }
+
+// Navigation types
+export type RootStackParamList = {
+  ProblemsList: undefined;
+  ProblemSolve: { problem: Problem };
+};
