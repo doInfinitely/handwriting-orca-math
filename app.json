@@ -39,8 +39,8 @@
       "expoPublic": {
         "SUPABASE_URL": "https://rkukjujwpmimamapxhtg.supabase.co",
         "SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJrdWtqdWp3cG1pbWFtYXB4aHRnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI2NDEwMjcsImV4cCI6MjA3ODIxNzAyN30.0Js4HY9mCeIQgnrWn57oTc8lHkrVdIe9EcfvbnhyfkQ",
-        "MATHPIX_PROXY_URL": "http://192.168.1.112:5056/recognize",
-        "LLM_API_URL": "http://192.168.1.112:5056/validate"
+        "MATHPIX_PROXY_URL": "http://handwriting-orca-math-production.up.railway.app/recognize",
+        "LLM_API_URL": "http://handwriting-orca-math-production.up.railway.app/validate"
       },
       "eas": {
         "projectId": "de513976-d38c-42fe-aed0-84f6591a2d3f"
