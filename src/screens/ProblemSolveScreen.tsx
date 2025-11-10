@@ -87,8 +87,8 @@ export function ProblemSolveScreen({ navigation, route }: Props) {
     console.log('📂 Loading or creating attempt for problem', problem.id);
     
     try {
-      // Check for existing attempt
-      const { data: existing, error: fetchError } = await supabase
+      // Check for existing unsolved attempt
+      const { data: unsolved } = await supabase
         .from('problem_attempts')
         .select('*')
         .eq('user_id', user.id)
@@ -96,42 +96,72 @@ export function ProblemSolveScreen({ navigation, route }: Props) {
         .eq('is_solved', false)
         .order('started_at', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
-      if (existing) {
-        console.log('✅ Found existing attempt:', existing.id);
-        setAttemptId(existing.id);
+      if (unsolved) {
+        console.log('✅ Found existing unsolved attempt:', unsolved.id);
+        setAttemptId(unsolved.id);
         // Load existing steps
-        if (existing.steps && Array.isArray(existing.steps)) {
-          const loadedSteps: Step[] = existing.steps.map((s: StepData) => ({
+        if (unsolved.steps && Array.isArray(unsolved.steps)) {
+          const loadedSteps: Step[] = unsolved.steps.map((s: StepData) => ({
             id: s.id,
             text: s.text,
             outcome: s.outcome,
             feedback: s.feedback,
             imageBase64: s.imageBase64,
           }));
-          console.log('📥 Loaded', loadedSteps.length, 'steps from database');
+          console.log('📥 Loaded', loadedSteps.length, 'steps from unsolved attempt');
           setSteps(loadedSteps);
         }
-      } else {
-        console.log('🆕 Creating new attempt');
-        // Create new attempt
-        const { data: newAttempt, error } = await supabase
-          .from('problem_attempts')
-          .insert({
-            user_id: user.id,
-            problem_id: String(problem.id),
-            problem_question: problem.question,
-            steps: [],
-            is_solved: false,
-          })
-          .select()
-          .single();
-
-        if (error) throw error;
-        console.log('✅ Created new attempt:', newAttempt.id);
-        setAttemptId(newAttempt.id);
+        return;
       }
+
+      // No unsolved attempt, check for most recent solved attempt to show previous work
+      const { data: solved } = await supabase
+        .from('problem_attempts')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('problem_id', String(problem.id))
+        .eq('is_solved', true)
+        .order('completed_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (solved) {
+        console.log('✅ Found previous solved attempt:', solved.id);
+        setAttemptId(solved.id);
+        // Load steps from solved attempt (read-only view of previous work)
+        if (solved.steps && Array.isArray(solved.steps)) {
+          const loadedSteps: Step[] = solved.steps.map((s: StepData) => ({
+            id: s.id,
+            text: s.text,
+            outcome: s.outcome,
+            feedback: s.feedback,
+            imageBase64: s.imageBase64,
+          }));
+          console.log('📥 Loaded', loadedSteps.length, 'steps from previous solved attempt');
+          setSteps(loadedSteps);
+        }
+        return;
+      }
+
+      // No existing attempt at all, create new one
+      console.log('🆕 Creating new attempt');
+      const { data: newAttempt, error } = await supabase
+        .from('problem_attempts')
+        .insert({
+          user_id: user.id,
+          problem_id: String(problem.id),
+          problem_question: problem.question,
+          steps: [],
+          is_solved: false,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      console.log('✅ Created new attempt:', newAttempt.id);
+      setAttemptId(newAttempt.id);
     } catch (error) {
       console.error('❌ Error loading/creating attempt:', error);
     } finally {
@@ -173,6 +203,41 @@ export function ProblemSolveScreen({ navigation, route }: Props) {
     }
   };
 
+  const logStepToActivity = async () => {
+    if (!user) return;
+
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const { data: existingActivity } = await supabase
+        .from('activity_log')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('activity_date', today)
+        .maybeSingle();
+
+      if (existingActivity) {
+        await supabase
+          .from('activity_log')
+          .update({
+            steps_completed: existingActivity.steps_completed + 1,
+          })
+          .eq('id', existingActivity.id);
+      } else {
+        await supabase
+          .from('activity_log')
+          .insert({
+            user_id: user.id,
+            activity_date: today,
+            problems_solved: 0,
+            steps_completed: 1,
+          });
+      }
+      console.log('📈 Step logged to activity');
+    } catch (error) {
+      console.error('❌ Error logging step to activity:', error);
+    }
+  };
+
   const markAsSolved = async () => {
     if (!user || !attemptId) return;
 
@@ -186,35 +251,51 @@ export function ProblemSolveScreen({ navigation, route }: Props) {
         })
         .eq('id', attemptId);
 
-      // Update activity log
+      // Check if this problem was solved before (for unique count)
+      const { data: previouslySolved } = await supabase
+        .from('problem_attempts')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('problem_id', String(problem.id))
+        .eq('is_solved', true)
+        .neq('id', attemptId) // Exclude current attempt
+        .limit(1)
+        .maybeSingle();
+
+      const isFirstTimeSolving = !previouslySolved;
+      console.log(isFirstTimeSolving ? '🎉 First time solving this problem!' : '♻️ Re-solving this problem');
+
+      // Update activity log with problem solved (steps already logged in real-time)
       const today = new Date().toISOString().split('T')[0];
       const { data: existingActivity } = await supabase
         .from('activity_log')
         .select('*')
         .eq('user_id', user.id)
         .eq('activity_date', today)
-        .single();
+        .maybeSingle();
 
       if (existingActivity) {
-        await supabase
-          .from('activity_log')
-          .update({
-            problems_solved: existingActivity.problems_solved + 1,
-            steps_completed: existingActivity.steps_completed + steps.length,
-          })
-          .eq('id', existingActivity.id);
+        // Only increment problems_solved if first time solving this problem
+        if (isFirstTimeSolving) {
+          await supabase
+            .from('activity_log')
+            .update({
+              problems_solved: existingActivity.problems_solved + 1,
+            })
+            .eq('id', existingActivity.id);
+        }
       } else {
         await supabase
           .from('activity_log')
           .insert({
             user_id: user.id,
             activity_date: today,
-            problems_solved: 1,
-            steps_completed: steps.length,
+            problems_solved: isFirstTimeSolving ? 1 : 0,
+            steps_completed: 0, // Steps already logged in real-time
           });
       }
     } catch (error) {
-      console.error('Error marking as solved:', error);
+      console.error('❌ Error marking as solved:', error);
     }
   };
 
@@ -233,6 +314,8 @@ export function ProblemSolveScreen({ navigation, route }: Props) {
       };
       setSteps((prev) => [...prev, newStep]);
       setTypedDraft("");
+      // Log step to activity in real-time
+      await logStepToActivity();
     } catch (e) {
       console.error("Validation error:", e);
       Alert.alert("Error", "Failed to validate step. Please try again.");
@@ -275,6 +358,8 @@ export function ProblemSolveScreen({ navigation, route }: Props) {
       setRecognizedImage(null);
       setRecognizedText(null);
       setClearCanvasTrigger((prev) => prev + 1);
+      // Log step to activity in real-time
+      await logStepToActivity();
     } catch (e) {
       console.error("Validation error:", e);
       Alert.alert("Error", "Failed to validate step. Please try again.");
@@ -288,7 +373,36 @@ export function ProblemSolveScreen({ navigation, route }: Props) {
     setRecognizedImage(null);
   };
 
-  const undo = () => setSteps((prev) => prev.slice(0, -1));
+  const undo = async () => {
+    if (steps.length === 0) return;
+    
+    setSteps((prev) => prev.slice(0, -1));
+    
+    // Decrement step count in activity log
+    if (user) {
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        const { data: existingActivity } = await supabase
+          .from('activity_log')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('activity_date', today)
+          .maybeSingle();
+
+        if (existingActivity && existingActivity.steps_completed > 0) {
+          await supabase
+            .from('activity_log')
+            .update({
+              steps_completed: existingActivity.steps_completed - 1,
+            })
+            .eq('id', existingActivity.id);
+          console.log('📉 Step removed from activity');
+        }
+      } catch (error) {
+        console.error('❌ Error removing step from activity:', error);
+      }
+    }
+  };
   
   const submitFinal = async () => {
     setValidating(true);
