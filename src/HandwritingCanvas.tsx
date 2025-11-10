@@ -39,7 +39,6 @@ export const HandwritingCanvas: React.FC<Props> = ({ onRecognize, clearTrigger }
     current.current = null;
   };
 
-  // ✅ No minDist + activeOffset together. Use defaults.
   const onGestureEvent = ({ nativeEvent }: PanGestureHandlerGestureEvent) => {
     const { x, y } = nativeEvent as any;
     if (x == null || y == null) return;

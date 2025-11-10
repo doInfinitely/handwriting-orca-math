@@ -58,25 +58,29 @@ export function ProfileScreen({ navigation }: Props) {
   const loadStats = async () => {
     if (!user) return;
 
-    // Get total solved problems
-    const { count: solvedCount } = await supabase
+    // Get UNIQUE solved problems (distinct problem_ids)
+    const { data: solvedAttempts } = await supabase
       .from('problem_attempts')
-      .select('*', { count: 'exact', head: true })
+      .select('problem_id')
       .eq('user_id', user.id)
       .eq('is_solved', true);
 
-    // Get total steps (sum all steps from all attempts)
-    const { data: attempts } = await supabase
-      .from('problem_attempts')
-      .select('steps')
+    // Count unique problem IDs
+    const uniqueProblemIds = new Set(solvedAttempts?.map(a => a.problem_id) || []);
+    const uniqueProblemsCount = uniqueProblemIds.size;
+
+    // Get total steps from activity_log (sum of steps_completed across all days)
+    const { data: activityLogs } = await supabase
+      .from('activity_log')
+      .select('steps_completed')
       .eq('user_id', user.id);
 
-    const totalSteps = attempts?.reduce((sum, attempt) => {
-      return sum + (Array.isArray(attempt.steps) ? attempt.steps.length : 0);
+    const totalSteps = activityLogs?.reduce((sum, log) => {
+      return sum + (log.steps_completed || 0);
     }, 0) || 0;
 
     setStats({
-      totalProblemsSolved: solvedCount || 0,
+      totalProblemsSolved: uniqueProblemsCount,
       totalStepsCompleted: totalSteps,
       currentStreak: 0, // TODO: Calculate streak
     });
