@@ -381,3 +381,4 @@ const styles = StyleSheet.create({
   activityDate: { color: '#7f8bc7', fontSize: 12 },
 });
 
+

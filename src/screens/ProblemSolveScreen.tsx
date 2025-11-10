@@ -47,6 +47,7 @@ export function ProblemSolveScreen({ navigation, route }: Props) {
   const [validating, setValidating] = useState(false);
   const [attemptId, setAttemptId] = useState<string | null>(null);
   const hasSavedRef = useRef(false);
+  const isLoadingRef = useRef(false);
 
   // Check if solved based on step outcomes
   const solved = useMemo(() => {
@@ -61,9 +62,10 @@ export function ProblemSolveScreen({ navigation, route }: Props) {
     }
   }, [user, problem.id]);
 
-  // Save progress whenever steps change
+  // Save progress whenever steps change (but not during initial load)
   useEffect(() => {
-    if (user && attemptId && steps.length > 0 && !hasSavedRef.current) {
+    if (user && attemptId && steps.length > 0 && !hasSavedRef.current && !isLoadingRef.current) {
+      console.log('💾 Auto-saving progress...', steps.length, 'steps');
       hasSavedRef.current = true;
       saveProgress().finally(() => {
         hasSavedRef.current = false;
@@ -81,9 +83,12 @@ export function ProblemSolveScreen({ navigation, route }: Props) {
   const loadOrCreateAttempt = async () => {
     if (!user) return;
 
+    isLoadingRef.current = true;
+    console.log('📂 Loading or creating attempt for problem', problem.id);
+    
     try {
       // Check for existing attempt
-      const { data: existing } = await supabase
+      const { data: existing, error: fetchError } = await supabase
         .from('problem_attempts')
         .select('*')
         .eq('user_id', user.id)
@@ -94,6 +99,7 @@ export function ProblemSolveScreen({ navigation, route }: Props) {
         .single();
 
       if (existing) {
+        console.log('✅ Found existing attempt:', existing.id);
         setAttemptId(existing.id);
         // Load existing steps
         if (existing.steps && Array.isArray(existing.steps)) {
@@ -104,9 +110,11 @@ export function ProblemSolveScreen({ navigation, route }: Props) {
             feedback: s.feedback,
             imageBase64: s.imageBase64,
           }));
+          console.log('📥 Loaded', loadedSteps.length, 'steps from database');
           setSteps(loadedSteps);
         }
       } else {
+        console.log('🆕 Creating new attempt');
         // Create new attempt
         const { data: newAttempt, error } = await supabase
           .from('problem_attempts')
@@ -121,10 +129,13 @@ export function ProblemSolveScreen({ navigation, route }: Props) {
           .single();
 
         if (error) throw error;
+        console.log('✅ Created new attempt:', newAttempt.id);
         setAttemptId(newAttempt.id);
       }
     } catch (error) {
-      console.error('Error loading/creating attempt:', error);
+      console.error('❌ Error loading/creating attempt:', error);
+    } finally {
+      isLoadingRef.current = false;
     }
   };
 
@@ -141,15 +152,24 @@ export function ProblemSolveScreen({ navigation, route }: Props) {
         timestamp: new Date().toISOString(),
       }));
 
-      await supabase
+      console.log('💾 Saving', stepsData.length, 'steps to attempt:', attemptId);
+      
+      const { error } = await supabase
         .from('problem_attempts')
         .update({
           steps: stepsData,
           last_updated: new Date().toISOString(),
         })
         .eq('id', attemptId);
+
+      if (error) {
+        console.error('❌ Failed to save progress:', error);
+        throw error;
+      }
+      
+      console.log('✅ Progress saved successfully');
     } catch (error) {
-      console.error('Error saving progress:', error);
+      console.error('❌ Error saving progress:', error);
     }
   };
 

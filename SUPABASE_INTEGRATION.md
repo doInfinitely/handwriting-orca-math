@@ -202,3 +202,4 @@ For issues:
 - Check app logs: `npx expo start` console
 - Review `SUPABASE_SETUP.md` for SQL setup
 
+
